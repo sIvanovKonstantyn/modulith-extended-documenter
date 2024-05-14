@@ -1,0 +1,1 @@
+_The lib extends Spring Modulith Documenter. Provides dependenies to openAPI. Will be used as an all-in-one documentation lib in the project._
