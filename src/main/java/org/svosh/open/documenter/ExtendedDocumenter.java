@@ -26,6 +26,8 @@ public class ExtendedDocumenter extends Documenter {
 
     private final String applicationName;
 
+    private static final String APPLICATION_DOC_FILE = "application.adoc";
+    private static final String CONFIGURATION_DOC_FILE = "configuration.adoc";
     private static final String DEFAULT_LOCATION = "spring-modulith-docs";
     private final ApplicationModules modules;
 
@@ -48,55 +50,62 @@ public class ExtendedDocumenter extends Documenter {
     }
 
     private void writeApplicationReferenceDocumentation(ApplicationModules modules) {
-        Path file = recreateFile("application.adoc");
+        var file = recreateFile(APPLICATION_DOC_FILE);
 
         try (Writer writer = new FileWriter(file.toFile())) {
             writer.write("== " + applicationName + "\n\n");
             writer.write("=== Reference documentation:\n\n");
             writer.write("xref:openapi.json#[Rest API]\n\n");
             writer.write("xref:components.puml#[Components]\n\n");
-            modules.forEach(m -> {
-                try {
-                    writer.write("<<" + "module-%s.adoc".formatted(m.getName()) + "#," + m.getDisplayName() + " Module>>\n\n");
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            });
+            addModulesReferences(modules, writer);
             writer.write("<<configuration.adoc#,Configuration>>\n\n");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
+    private void addModulesReferences(ApplicationModules modules, Writer writer) {
+        modules.forEach(m -> {
+            try {
+                writer.write("<<" + "module-%s.adoc".formatted(m.getName()) + "#," + m.getDisplayName() + " Module>>\n\n");
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
     private void writeConfigurationDocumentation() {
-        InputStream stream = getClass().getClassLoader()
-            .getResourceAsStream("application.properties");
+        var stream = getClass().getClassLoader()
+            .getResourceAsStream("application.properties");//TODO support other types
 
         if (stream == null) {
             return;
         }
 
-        Path file = recreateFile("configuration.adoc");
+        var file = recreateFile(CONFIGURATION_DOC_FILE);
 
-        try (Writer writer = new FileWriter(file.toFile()); BufferedReader br = new BufferedReader(new InputStreamReader(stream))) {//TODO support other types
+        try (var writer = new FileWriter(file.toFile());
+             var br = new BufferedReader(new InputStreamReader(stream))) {
             var documentationText = br.lines()
-                .map(s -> {
-                    if (s.startsWith("#")) {
-                        return "_" + s.replace("#", "")
-                            .trim() + "_";
-                    } else {
-                        var parts = s.split("=", 2);
-                        if (parts.length < 2) {
-                            return s;
-                        }
-                        return "*" + parts[0] + "*\n\n'''";
-                    }
-                })
+                .map(this::formatConfigurationRow)
                 .collect(Collectors.joining("\n\n"));
 
             writer.write(documentationText);
         } catch (IOException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    private String formatConfigurationRow(String s) {
+        if (s.startsWith("#")) {
+            return "_" + s.replace("#", "")
+                .trim() + "_";
+        } else {
+            var parts = s.split("=", 2);
+            if (parts.length < 2) {
+                return s;
+            }
+            return "*" + parts[0] + "*\n\n'''";
         }
     }
 
@@ -131,7 +140,7 @@ public class ExtendedDocumenter extends Documenter {
     }
 
     private void addTextToModuleDocumentaion(ApplicationModule module, String documentationText) {
-        try (FileWriter writer = new FileWriter(getTargetFileName(module.getName()), true)) {
+        try (var writer = new FileWriter(getTargetFileName(module.getName()), true)) {
 
             writer.write(documentationText);
 
@@ -172,7 +181,7 @@ public class ExtendedDocumenter extends Documenter {
         try {
 
             Files.createDirectories(Paths.get(getDefaultOutputDirectory()));
-            Path filePath = Paths.get(getDefaultOutputDirectory(), name);
+            var filePath = Paths.get(getDefaultOutputDirectory(), name);
             Files.deleteIfExists(filePath);
 
             return Files.createFile(filePath);
@@ -185,7 +194,9 @@ public class ExtendedDocumenter extends Documenter {
     public void moveToFolder(String destinationDir) {
         var sourceDir = getDefaultOutputDirectory();
 
-        Stream.concat(Stream.of(Paths.get(sourceDir, "configuration.adoc"), Paths.get(sourceDir, "components.puml"), Paths.get(sourceDir, "application.adoc"),
+        Stream.concat(Stream.of(Paths.get(sourceDir, "configuration.adoc"),
+                Paths.get(sourceDir, "components.puml"),
+                Paths.get(sourceDir, "application.adoc"),
                 Paths.get(getTargetFolder(), "openapi.json")), modules.stream()
                 .map(m -> Paths.get(getTargetFileName(m.getName()))))
             .map(Path::toFile)
